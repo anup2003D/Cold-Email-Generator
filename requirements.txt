@@ -6,3 +6,6 @@ chromadb
 pandas
 python-dotenv
 uuid
+pysqlite3-binary
+hnswlib
+sentence-transformers

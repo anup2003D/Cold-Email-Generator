@@ -13,7 +13,7 @@ class Chain:
         self.llm = ChatGroq(
             temperature=0,
             groq_api_key=os.getenv("GROQ_API_KEY"),
-            model_name="llama3-70b-8192"
+            model_name="llama-3.1-8b-instant"
         )
         # Your portfolio link
         self.portfolio_link = "https://anup2003d.github.io/portfolio-site/"
