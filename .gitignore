@@ -1,4 +1,2 @@
 .env
-my_portfolio.csv
 __pycache__/
-chroma.sqlite3
