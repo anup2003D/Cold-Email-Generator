@@ -88,3 +88,6 @@ backend/resumes/
 
 # Node / extension
 node_modules/
+
+# Archived / unused files
+Useless/

@@ -7,8 +7,16 @@ import os
 import shutil
 from pathlib import Path
 
-# Add parent directory to path to import existing modules
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'App'))
+# ── Path setup ──────────────────────────────────────────────────────────────
+# Root of the project (where this file lives)
+ROOT_DIR = Path(__file__).parent
+
+# Add App/ so we can import CMGchain, CMGportfolio, CMGutils
+sys.path.append(str(ROOT_DIR / "App"))
+
+# Add backend/ so we can import smtp_service, resume_processor
+sys.path.append(str(ROOT_DIR / "backend"))
+# ────────────────────────────────────────────────────────────────────────────
 
 from CMGchain import Chain
 from CMGportfolio import Portfolio
@@ -28,7 +36,7 @@ app.add_middleware(
 )
 
 # Initialize services
-csv_path = os.path.join(os.path.dirname(__file__), '..', 'App', 'Resource', 'my_portfolio.csv')
+csv_path = str(ROOT_DIR / "App" / "Resource" / "my_portfolio.csv")
 chain = Chain()
 portfolio = Portfolio(csv_path)
 smtp_service = SMTPService()
@@ -163,8 +171,8 @@ async def smtp_status():
             "instructions": {
                 "step1": "Go to https://myaccount.google.com/apppasswords",
                 "step2": "Create App Password for Mail",
-                "step3": "Add to backend/.env: SMTP_EMAIL=your-email@gmail.com",
-                "step4": "Add to backend/.env: SMTP_PASSWORD=your-16-char-app-password"
+                "step3": "Add to .env: SMTP_EMAIL=your-email@gmail.com",
+                "step4": "Add to .env: SMTP_PASSWORD=your-16-char-app-password"
             }
         }
 

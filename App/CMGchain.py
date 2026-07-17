@@ -239,58 +239,27 @@ Company Name: {company_name}
 {portfolio_section}
 
 ### INSTRUCTION:
-You are {applicant_name}, seeking new opportunities. Write a compelling job application email that positions you as an ideal candidate for the specific role mentioned in the job description.
+You are {applicant_name}. Write a cold email for a job application that strictly follows the template structure below. Adapt the bracketed information using the job description and company context.
 
-**CRITICAL: This is a JOB APPLICATION EMAIL, not a sales pitch. You are applying TO them, not selling services.**
+**TEMPLATE STRUCTURE TO FOLLOW:**
+Subject: Application for [Specific Role Title] - {applicant_name}
 
-**Structure Requirements:**
-1. **Subject Line**: Professional application subject mentioning the specific role title
-2. **Opening**: Express genuine interest in the specific role and company
-3. **Skills Match**: Directly connect your technical skills to their requirements
-4. **Relevant Experience**: Share 2-3 specific examples that demonstrate your ability to excel in this role
-5. **Cultural Fit**: Show understanding of their company values and how you align{portfolio_instruction}
-7. **Professional Close**: Express enthusiasm and request for interview/discussion
+Hi [Name or Hiring Team],
 
-**Tone and Style:**
-- Professional and respectful (you're the applicant)
-- Enthusiastic but not desperate
-- Confident in your abilities without being arrogant
-- Specific and tailored to their exact requirements
-- Humble and eager to contribute to their team
-- Concise (under 250 words)
+I came across {company_name} and really liked what you're building around [specific product or feature based on the job description].
 
-**Key Elements to Include:**
-- Use "I am writing to apply for..." or similar application language
-- Match YOUR skills to THEIR specific requirements mentioned in job description
-- Show genuine research about their company and role
-- Quantify your achievements with specific metrics
-- Demonstrate how you can solve their problems or add value to their team
-- Express enthusiasm about joining THEIR organization
-- Request an interview or call to discuss further
+I'm a B.Tech CSE student with hands-on experience in Python, backend development, and AI. I've built projects including a voice assistant, an AI-powered cold email generator, and ML applications, and I'm looking for an internship or entry-level software engineering opportunity.
 
-**Avoid:**
-- Sounding like you're selling services to them
-- Generic application templates
-- Overly casual or overly formal language
-- Making assumptions about their needs beyond what's in the job description
-- Using buzzwords without substance
+I've attached my resume. If you think my profile could be a good fit, I'd love the opportunity to chat.
 
-**Important Context Adjustments:**
-- If the role is "Senior" level, position yourself as experienced and ready for senior responsibilities
-- If the role is "Junior/Entry-level," show eagerness to learn and grow
-- If it's an "Internship," emphasize learning goals and how you can contribute while growing
-- Match the seniority level in your language and expectations
-
-### OUTPUT FORMAT:
-Subject: Application for [Specific Role Title] - [Your Name]
-
-Dear Hiring Manager / Dear [Company Name] Team,
-
-[Email body - professional job application tone]
-
-Thank you for considering my application. I look forward to hearing from you.
+Thanks for your time!
 
 {signature}
+
+**Key Elements to Include:**
+- Only output the final email starting with the Subject line.
+- Do not add any extra paragraphs or fluff outside this structure.
+- Ensure the tone matches the provided template precisely.
 
 ############# EMAIL (NO PREAMBLE):
             """

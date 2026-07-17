@@ -49,30 +49,42 @@ Turn a 30-minute application into a 30-second one.
 
 ```
 Cold Email Generator/
-├── backend/
-│   ├── main.py                # FastAPI server & all API routes
-│   ├── smtp_service.py        # Gmail SMTP email sender
-│   ├── resume_processor.py    # PDF resume parser → portfolio JSON
-│   ├── gmail_service.py       # (legacy OAuth helper)
-│   ├── requirements.txt
-│   ├── .env                   # ← your secrets go here (not committed)
-│   ├── resumes/               # Uploaded PDF resumes (not committed)
-│   └── vectorstore/           # ChromaDB data (not committed)
+├── main.py                        # FastAPI server — entry point (run this!)
+├── requirements.txt               # All Python dependencies
+├── venv/                          # Python virtual environment (not committed)
+├── .env                           # Your secrets go here (not committed)
 │
-├── extension/
-│   ├── manifest.json          # Chrome extension config (MV3)
-│   ├── popup.html / popup.js  # Extension UI & logic
-│   ├── content.js             # Page scraper (runs on job sites)
-│   └── background.js          # Service worker
+├── backend/                       # Core service modules
+│   ├── smtp_service.py            # Gmail SMTP email sender
+│   ├── resume_processor.py        # PDF resume parser → portfolio JSON
+│   ├── resumes/                   # Uploaded PDF resumes (not committed)
+│   └── vectorstore/               # ChromaDB data (not committed)
 │
-├── App/
-│   ├── CMGchain.py            # LangChain prompt chains
-│   ├── CMGportfolio.py        # Portfolio query via ChromaDB
-│   ├── CMGutils.py            # Text cleaning utilities
+├── App/                           # LangChain logic + Streamlit UI
+│   ├── CMGmain.py                 # Streamlit app (alternative front-end)
+│   ├── CMGchain.py                # LangChain prompt chains
+│   ├── CMGportfolio.py            # Portfolio query via ChromaDB
+│   ├── CMGutils.py                # Text cleaning utilities
 │   └── Resource/
-│       └── my_portfolio.csv   # Fallback portfolio (tech stack + links)
+│       └── my_portfolio.csv       # Fallback portfolio (tech stack + links)
 │
-├── start.bat                  # One-click Windows launcher
+├── extension/                     # Chrome extension (Manifest V3)
+│   ├── manifest.json              # Extension config
+│   ├── popup.html / popup.js      # Extension UI & logic
+│   ├── content.js                 # Page scraper (runs on job sites)
+│   ├── background.js              # Service worker
+│   ├── config.js                  # API base URL config
+│   └── icons/                     # Extension icons
+│
+├── Useless/                       # Archived / unused files (safe to ignore)
+│   ├── docs/                      # Old setup guides & markdown docs
+│   ├── notebooks/                 # Jupyter notebooks (prototypes)
+│   ├── app_unused/                # Old Streamlit draft
+│   ├── backend_unused/            # Old backend scripts
+│   └── root_scripts/              # One-off utility scripts
+│
+├── Anup Dutta Resume.pdf          # Source resume
+├── .gitignore
 └── README.md
 ```
 
@@ -93,7 +105,7 @@ Cold Email Generator/
 git clone <your-repo-url>
 cd "Cold Emaill Generator"
 
-cd backend
+# Create & activate virtual environment (from project root)
 python -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # macOS/Linux
@@ -101,11 +113,9 @@ venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 ```
 
-Or on Windows, just double-click **`start.bat`**.
-
 ### 2 — Configure Environment
 
-Create `backend/.env`:
+Create `.env` in the **project root**:
 
 ```env
 # Required
@@ -126,10 +136,10 @@ SENDER_NAME=Your Name
 > 2. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
 > 3. Create a password for "Mail" — copy the 16 characters into `.env`
 
-### 3 — Start the Backend
+### 3 — Start the Server
 
 ```bash
-cd backend
+# From the project root (with venv activated)
 python main.py
 # API running at http://localhost:8000
 # Docs at       http://localhost:8000/docs
@@ -204,12 +214,12 @@ cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
 
 ## Troubleshooting
 
-**Backend won't start**
+**Server won't start**
 ```bash
-cd backend
+# From project root
 venv\Scripts\activate
 pip install -r requirements.txt
-# Confirm backend/.env exists with GROQ_API_KEY
+# Confirm .env exists at project root with GROQ_API_KEY
 ```
 
 **SMTP not sending**
