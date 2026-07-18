@@ -47,6 +47,9 @@ resume_processor = ResumeProcessor()
 class JobExtractionRequest(BaseModel):
     text: str
 
+class CompanyExtractionRequest(BaseModel):
+    text: str
+
 class EmailGenerationRequest(BaseModel):
     job_data: dict
     custom_links: Optional[List[str]] = None
@@ -64,6 +67,7 @@ async def root():
         "version": "1.0.0",
         "endpoints": [
             "/api/extract-job",
+            "/api/extract-company",
             "/api/generate-email",
             "/api/send-email-smtp",
             "/api/smtp-status",
@@ -90,6 +94,25 @@ async def extract_job(request: JobExtractionRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error extracting job: {str(e)}")
+
+
+@app.post("/api/extract-company")
+async def extract_company(request: CompanyExtractionRequest):
+    """Extract company information from scraped website text"""
+    try:
+        cleaned_text = clean_text(request.text)
+        if not cleaned_text or len(cleaned_text) < 50:
+            raise HTTPException(status_code=400, detail="Text too short or empty")
+
+        company_data = chain.extract_company_info(cleaned_text)
+        return {
+            "success": True,
+            "company_data": company_data
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error extracting company info: {str(e)}")
 
 
 @app.post("/api/generate-email")

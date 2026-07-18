@@ -77,6 +77,27 @@ Education & Certifications:
 - Certified in advanced analytics tools and methodologies
 - Continuous learner staying updated with latest data science trends"""
 
+    def extract_company_info(self, cleaned_text):
+        """
+        Extract company information from scraped website text.
+        
+        Args:
+            cleaned_text: Cleaned text scraped from a company website
+            
+        Returns:
+            dict with keys: company_name, company_domain, company_highlight,
+                           products_services, tech_stack
+        
+        NOTE: This is a stub — full LLM-based implementation comes in Phase 4.
+        """
+        return {
+            "company_name": "Unknown Company",
+            "company_domain": "Technology",
+            "company_highlight": "Not available",
+            "products_services": "Not available",
+            "tech_stack": "Not available"
+        }
+
     def extract_jobs(self, cleaned_text):
         prompt_extract = PromptTemplate.from_template(
             """

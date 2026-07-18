@@ -2,6 +2,8 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -29,7 +31,7 @@ class SMTPService:
         """Check if SMTP is properly configured"""
         return bool(self.sender_email and self.sender_password)
     
-    def send_email(self, to_email, subject, body):
+    def send_email(self, to_email, subject, body, attachment_path: str = None):
         """
         Send email via SMTP
         
@@ -37,6 +39,7 @@ class SMTPService:
             to_email: Recipient email address
             subject: Email subject line
             body: Email body content (plain text)
+            attachment_path: Optional path to a PDF file to attach
             
         Returns:
             dict with success status and message
@@ -45,8 +48,8 @@ class SMTPService:
             raise Exception("SMTP not configured. Add SMTP_EMAIL and SMTP_PASSWORD to .env file")
         
         try:
-            # Create message
-            message = MIMEMultipart("alternative")
+            # Create message — use 'mixed' to support file attachments
+            message = MIMEMultipart("mixed")
             message["Subject"] = subject
             message["From"] = f"{self.sender_name} <{self.sender_email}>"
             message["To"] = to_email
@@ -54,6 +57,30 @@ class SMTPService:
             # Add body
             text_part = MIMEText(body, "plain")
             message.attach(text_part)
+            
+            # Attach PDF if provided
+            if attachment_path:
+                if os.path.exists(attachment_path):
+                    try:
+                        with open(attachment_path, "rb") as attachment_file:
+                            part = MIMEBase("application", "octet-stream")
+                            part.set_payload(attachment_file.read())
+                        
+                        encoders.encode_base64(part)
+                        
+                        filename = os.path.basename(attachment_path)
+                        part.add_header(
+                            "Content-Disposition",
+                            f"attachment; filename= {filename}",
+                        )
+                        message.attach(part)
+                        print(f"📎 Attached file: {filename}")
+                    except Exception as e:
+                        print(f"⚠️  Warning: Failed to attach file '{attachment_path}': {e}")
+                        print("   Sending email without attachment.")
+                else:
+                    print(f"⚠️  Warning: Attachment file not found: '{attachment_path}'")
+                    print("   Sending email without attachment.")
             
             # Connect to SMTP server
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
