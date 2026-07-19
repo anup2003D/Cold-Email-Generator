@@ -51,13 +51,16 @@ class CompanyExtractionRequest(BaseModel):
     text: str
 
 class EmailGenerationRequest(BaseModel):
-    job_data: dict
+    page_type: str = "job_posting"
+    job_data: Optional[dict] = None
+    company_data: Optional[dict] = None
     custom_links: Optional[List[str]] = None
 
 class EmailRequest(BaseModel):
     to_email: str
     subject: str
     body: str
+    attach_resume: bool = True
 
 
 @app.get("/")
@@ -117,24 +120,33 @@ async def extract_company(request: CompanyExtractionRequest):
 
 @app.post("/api/generate-email")
 async def generate_email(request: EmailGenerationRequest):
-    """Generate personalized cold email based on job data"""
+    """Generate personalized cold email based on page type"""
     try:
-        job_data = request.job_data
+        page_type = request.page_type
+        job_data = request.job_data or {}
+        company_data = request.company_data or {}
 
         # Get portfolio links if not provided
         if request.custom_links:
             links = request.custom_links
         else:
-            skills = job_data.get('skills', [])
+            skills = job_data.get('skills', []) if job_data else []
             if isinstance(skills, str):
                 skills = [s.strip() for s in skills.split(',')]
             links = portfolio.query_links(skills)
 
-        # Generate email
-        email = chain.write_mail(job_data, links)
+        # Route based on page_type
+        if page_type == "job_posting":
+            email = getattr(chain, 'write_mail_job_posting', chain.write_mail)(job_data, links)
+            role = job_data.get('role', 'Position')
+        elif page_type == "company_website":
+            email = getattr(chain, 'write_mail_company_website', chain.write_mail)(company_data, links)
+            role = "Opportunity"
+        else:
+            email = getattr(chain, 'write_mail_generic', chain.write_mail)(links)
+            role = "Opportunity"
 
         # Generate subject line with applicant name from resume
-        role = job_data.get('role', 'Position')
         applicant_name = "Applicant"
         if resume_processor.has_resume():
             try:
@@ -143,7 +155,11 @@ async def generate_email(request: EmailGenerationRequest):
                     applicant_name = portfolio_data.get('name', 'Applicant')
             except Exception:
                 pass
-        subject = f"Application for {role} - {applicant_name}"
+        
+        if page_type == "job_posting":
+            subject = f"Application for {role} - {applicant_name}"
+        else:
+            subject = f"Software Engineering Opportunities - {applicant_name}"
 
         return {
             "success": True,
@@ -159,10 +175,20 @@ async def generate_email(request: EmailGenerationRequest):
 async def send_email_smtp(payload: EmailRequest):
     """Send email via SMTP (Gmail App Password — no OAuth needed)"""
     try:
+        attachment_path = None
+        if payload.attach_resume:
+            # Find the uploaded PDF in backend/resumes/
+            resume_dir = resume_processor.resume_folder
+            if resume_dir.exists():
+                pdf_files = list(resume_dir.glob("*.pdf"))
+                if pdf_files:
+                    attachment_path = str(pdf_files[0])
+                    
         result = smtp_service.send_email(
             to_email=payload.to_email,
             subject=payload.subject,
-            body=payload.body
+            body=payload.body,
+            attachment_path=attachment_path
         )
         return result
     except HTTPException:
