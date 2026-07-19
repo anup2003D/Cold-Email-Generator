@@ -80,23 +80,41 @@ Education & Certifications:
     def extract_company_info(self, cleaned_text):
         """
         Extract company information from scraped website text.
-        
-        Args:
-            cleaned_text: Cleaned text scraped from a company website
-            
-        Returns:
-            dict with keys: company_name, company_domain, company_highlight,
-                           products_services, tech_stack
-        
-        NOTE: This is a stub — full LLM-based implementation comes in Phase 4.
         """
-        return {
-            "company_name": "Unknown Company",
-            "company_domain": "Technology",
-            "company_highlight": "Not available",
-            "products_services": "Not available",
-            "tech_stack": "Not available"
-        }
+        prompt_extract = PromptTemplate.from_template(
+            """
+            ### SCRAPED TEXT FROM COMPANY WEBSITE:
+{page_data}
+
+### INSTRUCTION:
+Extract company information from the scraped website text. Focus on identifying:
+- company_name: The name of the company
+- company_domain: What industry or field they operate in
+- company_highlight: The most impressive thing about them (e.g., funding, user base, key achievement)
+- products_services: What they build or offer
+- tech_stack: Any technical stack or tools mentioned (if detectable)
+
+Return the information in JSON format with the keys: `company_name`, `company_domain`, `company_highlight`, `products_services`, `tech_stack`.
+If any field is not found, use "Not specified" as the value.
+
+### VALID JSON (NO PREAMBLE):
+            """
+        )
+        chain_extract = prompt_extract | self.llm
+        res = chain_extract.invoke(input={"page_data": cleaned_text})
+        try:
+            json_parser = JsonOutputParser()
+            res = json_parser.parse(res.content)
+        except OutputParserException:
+            # Fallback
+            res = {
+                "company_name": "Unknown Company",
+                "company_domain": "Technology",
+                "company_highlight": "Not available",
+                "products_services": "Not available",
+                "tech_stack": "Not available"
+            }
+        return res
 
     def extract_jobs(self, cleaned_text):
         prompt_extract = PromptTemplate.from_template(
@@ -166,38 +184,64 @@ If any field is not found, use "Not specified" as the value.
         # Otherwise, add https://
         return f"https://{url}"
 
-    def write_mail(self, job, links=None):
-        # Get portfolio link from resume (don't use default if resume uploaded but no link)
-        portfolio_link = None
+    def _get_portfolio_link(self):
+        """Helper to safely get portfolio link"""
         has_uploaded_resume = self.resume_processor and self.resume_processor.has_resume()
         
         if has_uploaded_resume:
             try:
                 portfolio_data = self.resume_processor.load_portfolio()
                 if portfolio_data and portfolio_data.get('portfolio_url') and portfolio_data.get('portfolio_url') != 'Not specified':
-                    portfolio_link = portfolio_data.get('portfolio_url')
+                    return self._format_url(portfolio_data.get('portfolio_url'))
             except:
                 pass
-        else:
-            # Only use default if no resume has been uploaded at all
-            portfolio_link = self.default_portfolio_link
+        return self.default_portfolio_link
         
-        # Use provided links or portfolio link if available
+    def _build_signature(self, portfolio_link=None):
+        """Helper to build email signature with contact details"""
+        applicant_name = "Applicant"
+        applicant_email = "your.email@example.com"
+        applicant_linkedin = None
+        applicant_github = None
+        
+        has_uploaded_resume = self.resume_processor and self.resume_processor.has_resume()
+        if has_uploaded_resume:
+            try:
+                portfolio_data = self.resume_processor.load_portfolio()
+                if portfolio_data:
+                    applicant_name = portfolio_data.get('name', applicant_name)
+                    applicant_email = portfolio_data.get('email', applicant_email)
+                    
+                    linkedin_raw = portfolio_data.get('linkedin', 'Not specified')
+                    if linkedin_raw and linkedin_raw not in ['Not specified', 'LinkedIn', 'linkedin']:
+                        applicant_linkedin = self._format_url(linkedin_raw)
+                    
+                    github_raw = portfolio_data.get('github', 'Not specified')
+                    if github_raw and github_raw not in ['Not specified', 'GitHub', 'github']:
+                        applicant_github = self._format_url(github_raw)
+            except:
+                pass
+        
+        signature_lines = [f"Best regards,", applicant_name, f"Email: {applicant_email}"]
+        if portfolio_link:
+            signature_lines.append(f"Portfolio: {portfolio_link}")
+        if applicant_linkedin:
+            signature_lines.append(f"LinkedIn: {applicant_linkedin}")
+        if applicant_github:
+            signature_lines.append(f"GitHub: {applicant_github}")
+            
+        return "\n".join(signature_lines), applicant_name
+
+    def write_mail_job_posting(self, job, links=None):
+        portfolio_link = self._get_portfolio_link()
         if links is None:
-            if portfolio_link:
-                links = [portfolio_link]
-            else:
-                links = []  # No links to include
+            links = [portfolio_link] if portfolio_link else []
         elif isinstance(links, str):
             links = [links]
 
-        # Extract company name from job data or use default
         company_name = job.get('company_name', 'the company') if isinstance(job, dict) else 'the company'
-
-        # Detect role level for appropriate positioning
         role_level = self._detect_role_level(job)
-
-        # Format job description properly
+        
         job_description = str(job) if not isinstance(job, dict) else f"""
 Role: {job.get('role', 'Not specified')}
 Experience: {job.get('experience', 'Not specified')}
@@ -209,43 +253,10 @@ Preferred Skills: {job.get('preferred_skills', 'Not specified')}
 Role Level Detected: {role_level}
         """
         
-        # Get dynamic applicant profile
         applicant_profile = self.get_applicant_profile()
-        
-        # Get applicant details from portfolio (default values as fallback)
-        applicant_name = "Applicant"
-        applicant_email = "your.email@example.com"
-        applicant_linkedin = None
-        applicant_github = None
-        
-        if has_uploaded_resume:
-            try:
-                portfolio_data = self.resume_processor.load_portfolio()
-                if portfolio_data:
-                    applicant_name = portfolio_data.get('name', applicant_name)
-                    applicant_email = portfolio_data.get('email', applicant_email)
-                    
-                    # Extract LinkedIn URL and validate
-                    linkedin_raw = portfolio_data.get('linkedin', 'Not specified')
-                    if linkedin_raw and linkedin_raw not in ['Not specified', 'LinkedIn', 'linkedin']:
-                        applicant_linkedin = self._format_url(linkedin_raw)
-                    
-                    # Extract GitHub URL and validate
-                    github_raw = portfolio_data.get('github', 'Not specified')
-                    if github_raw and github_raw not in ['Not specified', 'GitHub', 'github']:
-                        applicant_github = self._format_url(github_raw)
-            except:
-                pass
-        
-        # Build dynamic signature based on available information
-        signature_lines = [f"Best regards,", applicant_name, f"Email: {applicant_email}"]
-        if portfolio_link:
-            signature_lines.append(f"Portfolio: {portfolio_link}")
-        if applicant_linkedin:
-            signature_lines.append(f"LinkedIn: {applicant_linkedin}")
-        if applicant_github:
-            signature_lines.append(f"GitHub: {applicant_github}")
-        signature = "\n".join(signature_lines)
+        signature, applicant_name = self._build_signature(portfolio_link)
+
+        portfolio_section = ("### PORTFOLIO LINKS:\n" + "\n".join([f"- {link}" for link in links])) if links else "### PORTFOLIO LINKS:\nNo portfolio links provided."
 
         prompt_email = PromptTemplate.from_template(
             """
@@ -286,14 +297,6 @@ Thanks for your time!
             """
         )
 
-        # Build portfolio section dynamically
-        if links and len(links) > 0:
-            portfolio_section = "### PORTFOLIO LINKS:\n" + "\n".join([f"- {link}" for link in links])
-            portfolio_instruction = "\n6. **Portfolio Reference**: Naturally mention your portfolio as evidence of your capabilities"
-        else:
-            portfolio_section = "### PORTFOLIO LINKS:\nNo portfolio links provided. Focus on skills and experience."
-            portfolio_instruction = "\n6. **Skills Focus**: Emphasize your technical skills and quantifiable achievements"
-        
         chain_email = prompt_email | self.llm
         res = chain_email.invoke({
             "job_description": job_description,
@@ -301,10 +304,142 @@ Thanks for your time!
             "applicant_profile": applicant_profile,
             "applicant_name": applicant_name,
             "portfolio_section": portfolio_section,
-            "portfolio_instruction": portfolio_instruction,
             "signature": signature
         })
         return res.content
+
+    def write_mail_company_website(self, company_data, links=None):
+        portfolio_link = self._get_portfolio_link()
+        if links is None:
+            links = [portfolio_link] if portfolio_link else []
+        elif isinstance(links, str):
+            links = [links]
+
+        company_name = company_data.get('company_name', 'your company') if isinstance(company_data, dict) else 'your company'
+        company_domain = company_data.get('company_domain', 'Technology') if isinstance(company_data, dict) else 'Technology'
+        company_highlight = company_data.get('company_highlight', 'your recent growth') if isinstance(company_data, dict) else 'your recent growth'
+        
+        applicant_profile = self.get_applicant_profile()
+        signature, applicant_name = self._build_signature(portfolio_link)
+
+        portfolio_section = ("### PORTFOLIO LINKS:\n" + "\n".join([f"- {link}" for link in links])) if links else "### PORTFOLIO LINKS:\nNo portfolio links provided."
+
+        prompt_email = PromptTemplate.from_template(
+            """
+            ### COMPANY CONTEXT:
+Company Name: {company_name}
+Domain/Industry: {company_domain}
+Company Highlight: {company_highlight}
+
+{applicant_profile}
+
+{portfolio_section}
+
+### INSTRUCTION:
+You are {applicant_name}. Write a cold email expressing interest in working at this company, following the template structure below. Adapt the bracketed information using the company context.
+
+**TEMPLATE STRUCTURE TO FOLLOW:**
+Subject: Software Engineering Opportunities - {applicant_name}
+
+Hi [Name or Hiring Team],
+
+I came across {company_name} and was really impressed by {company_highlight}. I love what you're doing in the {company_domain} space.
+
+I'm a B.Tech CSE student with hands-on experience in Python, backend development, and AI. I've built projects including a voice assistant, an AI-powered cold email generator, and ML applications. While I didn't see a specific open role, I'd love to be considered for any internship or entry-level software engineering opportunities.
+
+I've attached my resume. If you think my profile could be a good fit, I'd love the opportunity to chat.
+
+Thanks for your time!
+
+{signature}
+
+**Key Elements to Include:**
+- Only output the final email starting with the Subject line.
+- Do not add any extra paragraphs or fluff outside this structure.
+- Ensure the tone matches the provided template precisely.
+
+############# EMAIL (NO PREAMBLE):
+            """
+        )
+
+        chain_email = prompt_email | self.llm
+        res = chain_email.invoke({
+            "company_name": company_name,
+            "company_domain": company_domain,
+            "company_highlight": company_highlight,
+            "applicant_profile": applicant_profile,
+            "applicant_name": applicant_name,
+            "portfolio_section": portfolio_section,
+            "signature": signature
+        })
+        return res.content
+
+    def write_mail_generic(self, links=None):
+        portfolio_link = self._get_portfolio_link()
+        if links is None:
+            links = [portfolio_link] if portfolio_link else []
+        elif isinstance(links, str):
+            links = [links]
+        
+        applicant_profile = self.get_applicant_profile()
+        signature, applicant_name = self._build_signature(portfolio_link)
+
+        portfolio_section = ("### PORTFOLIO LINKS:\n" + "\n".join([f"- {link}" for link in links])) if links else "### PORTFOLIO LINKS:\nNo portfolio links provided."
+
+        prompt_email = PromptTemplate.from_template(
+            """
+            {applicant_profile}
+
+{portfolio_section}
+
+### INSTRUCTION:
+You are {applicant_name}. Write a generic cold email for a job application following the template structure below.
+
+**TEMPLATE STRUCTURE TO FOLLOW:**
+Subject: Software Engineering Opportunities - {applicant_name}
+
+Hi [Name or Hiring Team],
+
+I am writing to express my interest in potential software engineering opportunities at your company. 
+
+I'm a B.Tech CSE student with hands-on experience in Python, backend development, and AI. I've built projects including a voice assistant, an AI-powered cold email generator, and ML applications, and I'm looking for an internship or entry-level software engineering opportunity.
+
+I've attached my resume. If you think my profile could be a good fit, I'd love the opportunity to chat.
+
+Thanks for your time!
+
+{signature}
+
+**Key Elements to Include:**
+- Only output the final email starting with the Subject line.
+- Do not add any extra paragraphs or fluff outside this structure.
+- Ensure the tone matches the provided template precisely.
+
+############# EMAIL (NO PREAMBLE):
+            """
+        )
+
+        chain_email = prompt_email | self.llm
+        res = chain_email.invoke({
+            "applicant_profile": applicant_profile,
+            "applicant_name": applicant_name,
+            "portfolio_section": portfolio_section,
+            "signature": signature
+        })
+        return res.content
+
+    def write_mail(self, job=None, links=None, company_data=None, page_type="job_posting"):
+        """
+        Router method for generating emails based on page type.
+        Maintains backward compatibility.
+        """
+        if page_type == "company_website":
+            return self.write_mail_company_website(company_data or job or {}, links)
+        elif page_type == "generic":
+            return self.write_mail_generic(links)
+        else:
+            # Default to job_posting
+            return self.write_mail_job_posting(job or {}, links)
 
     def generate_cold_email(self, job_data, custom_links=None):
         """
