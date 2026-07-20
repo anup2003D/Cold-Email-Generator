@@ -44,4 +44,14 @@ class Portfolio:
                                     ids=[str(uuid.uuid4())])
 
     def query_links(self, skills):
-        return self.collection.query(query_texts=skills, n_results=2).get('metadatas', [])
+        if not skills:
+            return []
+        results = self.collection.query(query_texts=skills, n_results=2).get('metadatas', [])
+        links = set()
+        if results:
+            for res_list in results:
+                if res_list:
+                    for metadata in res_list:
+                        if metadata and 'links' in metadata:
+                            links.add(metadata['links'])
+        return list(links)

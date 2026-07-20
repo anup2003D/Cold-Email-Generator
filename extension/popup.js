@@ -3,21 +3,29 @@ const API_BASE_URL = 'http://localhost:8000';
 
 // State management
 let currentJob = null;
+let currentCompanyData = null;
+let currentPageType = 'job_posting'; // 'job_posting', 'company_website', or 'generic'
 let generatedEmail = null;
 let emailSubject = null;
 let hasResume = false;
+let attachResume = true;
 
 // DOM Elements
 const initialState = document.getElementById('initialState');
 const jobExtractedState = document.getElementById('jobExtractedState');
+const companyDetectedState = document.getElementById('companyDetectedState');
+const genericState = document.getElementById('genericState');
 const emailGeneratedState = document.getElementById('emailGeneratedState');
 const loadingState = document.getElementById('loadingState');
 
 const statusMessage = document.getElementById('statusMessage');
 const loadingMessage = document.getElementById('loadingMessage');
 const jobInfo = document.getElementById('jobInfo');
+const companyInfo = document.getElementById('companyInfo');
 const emailPreview = document.getElementById('emailPreview');
 const recipientEmail = document.getElementById('recipientEmail');
+const contextBanner = document.getElementById('contextBanner');
+const attachResumeCheckbox = document.getElementById('attachResumeCheckbox');
 
 // Resume elements
 const resumeStatus = document.getElementById('resumeStatus');
@@ -28,8 +36,9 @@ const changeResumeBtn = document.getElementById('changeResumeBtn');
 // Buttons
 const extractJobBtn = document.getElementById('extractJobBtn');
 const generateEmailBtn = document.getElementById('generateEmailBtn');
+const generateCompanyEmailBtn = document.getElementById('generateCompanyEmailBtn');
+const generateGenericEmailBtn = document.getElementById('generateGenericEmailBtn');
 const sendEmailBtn = document.getElementById('sendEmailBtn');
-const editEmailBtn = document.getElementById('editEmailBtn');
 const regenerateBtn = document.getElementById('regenerateBtn');
 
 // Initialize
@@ -40,18 +49,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Event Listeners
 function setupEventListeners() {
-    extractJobBtn.addEventListener('click', extractJobFromPage);
+    extractJobBtn.addEventListener('click', analyzeCurrentPage);
     generateEmailBtn.addEventListener('click', generateEmail);
+    generateCompanyEmailBtn.addEventListener('click', generateEmail);
+    generateGenericEmailBtn.addEventListener('click', generateEmail);
     sendEmailBtn.addEventListener('click', sendEmail);
-    editEmailBtn.addEventListener('click', editEmail);
     regenerateBtn.addEventListener('click', () => {
-        showState('jobExtracted');
+        if (currentPageType === 'job_posting') {
+            showState('jobExtracted');
+        } else if (currentPageType === 'company_website') {
+            showState('companyDetected');
+        } else {
+            showState('generic');
+        }
     });
 
     // Resume event listeners
     uploadResumeBtn.addEventListener('click', () => resumeFileInput.click());
     changeResumeBtn.addEventListener('click', changeResume);
     resumeFileInput.addEventListener('change', handleResumeUpload);
+
+    // Attach resume checkbox listener
+    if (attachResumeCheckbox) {
+        attachResumeCheckbox.addEventListener('change', (e) => {
+            attachResume = e.target.checked;
+        });
+    }
 }
 
 // Check Resume Status
@@ -159,99 +182,62 @@ async function changeResume() {
     }
 }
 
-// Extract job from current page
-async function extractJobFromPage() {
+// Analyze current page using content script
+async function analyzeCurrentPage() {
     try {
-        showLoading('Extracting job details...');
+        showLoading('Analyzing page...');
 
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-        const results = await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            func: () => {
-                const keywords = ['job description', 'description', 'overview', 'responsibilities', 'requirements', 'qualifications', 'about the role', 'about this job'];
-
-                let bestMatch = null;
-                let maxLength = 0;
-
-                const walker = document.createTreeWalker(
-                    document.body,
-                    NodeFilter.SHOW_TEXT,
-                    null,
-                    false
-                );
-
-                const potentialSections = new Set();
-
-                while (walker.nextNode()) {
-                    const text = walker.currentNode.textContent.toLowerCase();
-                    if (keywords.some(kw => text.includes(kw))) {
-                        let element = walker.currentNode.parentElement;
-                        for (let i = 0; i < 3 && element.parentElement; i++) {
-                            element = element.parentElement;
-                        }
-                        potentialSections.add(element);
-                    }
-                }
-
-                for (const section of potentialSections) {
-                    const text = section.innerText;
-                    if (text && text.length > maxLength) {
-                        maxLength = text.length;
-                        bestMatch = text;
-                    }
-                }
-
-                if (!bestMatch || maxLength < 200) {
-                    const selectors = [
-                        '[class*="job-description"]',
-                        '[class*="job-details"]',
-                        '[class*="description"]',
-                        '[id*="job-description"]',
-                        '[id*="description"]',
-                        'article',
-                        'main',
-                        '.content'
-                    ];
-
-                    for (const selector of selectors) {
-                        const element = document.querySelector(selector);
-                        if (element && element.innerText.length > 200) {
-                            bestMatch = element.innerText;
-                            break;
-                        }
-                    }
-                }
-
-                if (!bestMatch || bestMatch.length < 100) {
-                    bestMatch = document.body.innerText;
-                }
-
-                return bestMatch;
-            }
-        });
-
-        const pageText = results[0].result;
-
-        if (!pageText || pageText.length < 100) {
-            throw new Error('Could not extract enough content from the page. Make sure you\'re on a job posting page.');
+        
+        // Ask content script for page type and extracted content
+        const response = await chrome.tabs.sendMessage(tab.id, { action: 'analyzePageType' });
+        
+        if (!response || !response.success) {
+            throw new Error(response ? response.error : 'Failed to communicate with page. Try reloading the tab.');
         }
 
-        const response = await fetch(`${API_BASE_URL}/api/extract-job`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: pageText })
-        });
+        currentPageType = response.pageType;
+        const pageText = response.content;
 
-        if (!response.ok) {
-            throw new Error('Failed to extract job details');
+        // Route based on page type
+        if (currentPageType === 'job_posting') {
+            showLoading('Extracting job details...');
+            
+            const apiResponse = await fetch(`${API_BASE_URL}/api/extract-job`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: pageText })
+            });
+
+            if (!apiResponse.ok) throw new Error('Failed to extract job details');
+            
+            const data = await apiResponse.json();
+            currentJob = data.jobs[0];
+            
+            displayJobInfo(currentJob);
+            showState('jobExtracted');
+            
+        } else if (currentPageType === 'company_website') {
+            showLoading('Extracting company details...');
+            
+            const apiResponse = await fetch(`${API_BASE_URL}/api/extract-company`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: pageText })
+            });
+
+            if (!apiResponse.ok) throw new Error('Failed to extract company details');
+            
+            const data = await apiResponse.json();
+            currentCompanyData = data.company_data;
+            
+            displayCompanyInfo(currentCompanyData);
+            showState('companyDetected');
+            
+        } else {
+            // Generic mode - no extraction needed
+            showState('generic');
         }
-
-        const data = await response.json();
-        currentJob = data.jobs[0];
-
-        displayJobInfo(currentJob);
-        showState('jobExtracted');
 
     } catch (error) {
         showError(error.message);
@@ -268,15 +254,31 @@ function displayJobInfo(job) {
     `;
 }
 
-// Generate email
+// Display company information
+function displayCompanyInfo(company) {
+    companyInfo.innerHTML = `
+        <div class="job-info-item"><strong>Company:</strong> ${company.company_name || 'Not specified'}</div>
+        <div class="job-info-item"><strong>Domain:</strong> ${company.company_domain || 'Not specified'}</div>
+        <div class="job-info-item"><strong>Highlight:</strong> ${company.company_highlight || 'Not specified'}</div>
+    `;
+}
+
+// Generate email based on current page type
 async function generateEmail() {
     try {
         showLoading('Generating personalized email...');
 
+        const requestBody = { page_type: currentPageType };
+        if (currentPageType === 'job_posting') {
+            requestBody.job_data = currentJob;
+        } else if (currentPageType === 'company_website') {
+            requestBody.company_data = currentCompanyData;
+        }
+
         const response = await fetch(`${API_BASE_URL}/api/generate-email`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ job_data: currentJob })
+            body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
@@ -287,11 +289,13 @@ async function generateEmail() {
         generatedEmail = data.email;
         emailSubject = data.subject;
 
-        emailPreview.textContent = generatedEmail;
+        emailPreview.value = generatedEmail;
 
         const companyEmail = await guessCompanyEmail();
         if (companyEmail) {
             recipientEmail.value = companyEmail;
+        } else {
+            recipientEmail.value = '';
         }
 
         showState('emailGenerated');
@@ -331,6 +335,12 @@ async function sendEmail() {
         if (!emailRegex.test(email)) {
             throw new Error('Please enter a valid email address');
         }
+        
+        // Read the currently edited email from the textarea
+        const currentEmailBody = emailPreview.value;
+        if (!currentEmailBody || currentEmailBody.trim() === '') {
+            throw new Error('Email body is empty');
+        }
 
         showLoading('Sending email via SMTP...');
 
@@ -340,7 +350,8 @@ async function sendEmail() {
             body: JSON.stringify({
                 to_email: email,
                 subject: emailSubject,
-                body: generatedEmail
+                body: currentEmailBody,
+                attach_resume: attachResume
             })
         });
 
@@ -361,21 +372,18 @@ async function sendEmail() {
     }
 }
 
-// Edit email
-function editEmail() {
-    const newEmail = prompt('Edit your email:', generatedEmail);
-    if (newEmail !== null && newEmail.trim() !== '') {
-        generatedEmail = newEmail;
-        emailPreview.textContent = generatedEmail;
-    }
-}
-
 // State management
 function showState(state) {
     initialState.classList.add('hidden');
     jobExtractedState.classList.add('hidden');
+    companyDetectedState.classList.add('hidden');
+    genericState.classList.add('hidden');
     emailGeneratedState.classList.add('hidden');
     loadingState.classList.add('hidden');
+    
+    // Reset banner display
+    contextBanner.style.display = 'none';
+    contextBanner.className = 'context-banner';
 
     switch (state) {
         case 'initial':
@@ -383,9 +391,36 @@ function showState(state) {
             break;
         case 'jobExtracted':
             jobExtractedState.classList.remove('hidden');
+            contextBanner.style.display = 'block';
+            contextBanner.classList.add('job');
+            contextBanner.textContent = '💼 Job Posting Detected';
+            break;
+        case 'companyDetected':
+            companyDetectedState.classList.remove('hidden');
+            contextBanner.style.display = 'block';
+            contextBanner.classList.add('company');
+            contextBanner.textContent = '🏢 Company Website Detected';
+            break;
+        case 'generic':
+            genericState.classList.remove('hidden');
+            contextBanner.style.display = 'block';
+            contextBanner.classList.add('generic');
+            contextBanner.textContent = '📧 Generic Page — Resume-Only Email';
             break;
         case 'emailGenerated':
             emailGeneratedState.classList.remove('hidden');
+            // Keep the banner showing for the email generated state
+            contextBanner.style.display = 'block';
+            if (currentPageType === 'job_posting') {
+                contextBanner.classList.add('job');
+                contextBanner.textContent = '💼 Job Posting Detected';
+            } else if (currentPageType === 'company_website') {
+                contextBanner.classList.add('company');
+                contextBanner.textContent = '🏢 Company Website Detected';
+            } else {
+                contextBanner.classList.add('generic');
+                contextBanner.textContent = '📧 Generic Page — Resume-Only Email';
+            }
             break;
         case 'loading':
             loadingState.classList.remove('hidden');
@@ -412,6 +447,8 @@ function showSuccess(message) {
 
 function resetExtension() {
     currentJob = null;
+    currentCompanyData = null;
+    currentPageType = 'job_posting';
     generatedEmail = null;
     emailSubject = null;
     recipientEmail.value = '';
